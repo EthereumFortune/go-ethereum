@@ -183,9 +183,6 @@ type BlockChain interface {
 	// HasBlock verifies a block's presence in the local chain.
 	HasBlock(common.Hash, uint64) bool
 
-	//
-	HasBlockAndState(hash common.Hash, number uint64) bool
-
 	// HasFastBlock verifies a snap block's presence in the local chain.
 	HasFastBlock(common.Hash, uint64) bool
 

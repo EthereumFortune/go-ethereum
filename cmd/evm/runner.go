@@ -139,10 +139,10 @@ func runCmd(ctx *cli.Context) error {
 		genesisConfig = gen
 		db := rawdb.NewMemoryDatabase()
 		genesis := gen.MustCommit(db)
-		statedb, _ = state.New(genesis.Root(), false, big.NewInt(0), state.NewDatabase(db), nil)
+		statedb, _ = state.New(genesis.Root(), state.NewDatabase(db), nil)
 		chainConfig = gen.Config
 	} else {
-		statedb, _ = state.New(common.Hash{}, false, big.NewInt(0), state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		statedb, _ = state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 		genesisConfig = new(core.Genesis)
 	}
 	if ctx.String(SenderFlag.Name) != "" {

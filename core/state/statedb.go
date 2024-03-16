@@ -125,18 +125,14 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
-
-	isFirenze bool
-	height    *big.Int
 }
 
 // New creates a new state from a given trie.
-func New(root common.Hash, isFirenze bool, height *big.Int, db Database, snaps *snapshot.Tree) (*StateDB, error) {
+func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) {
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
 	}
-
 	sdb := &StateDB{
 		db:                  db,
 		trie:                tr,
@@ -150,10 +146,7 @@ func New(root common.Hash, isFirenze bool, height *big.Int, db Database, snaps *
 		journal:             newJournal(),
 		accessList:          newAccessList(),
 		hasher:              crypto.NewKeccakState(),
-		height:              height,
-		isFirenze:           isFirenze,
 	}
-
 	if sdb.snaps != nil {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
 			sdb.snapDestructs = make(map[common.Hash]struct{})
@@ -186,10 +179,6 @@ func (s *StateDB) StopPrefetcher() {
 	}
 }
 
-func (s *StateDB) SetHeight(height *big.Int) {
-	s.height = height
-}
-
 // setError remembers the first non-nil error it is called with.
 func (s *StateDB) setError(err error) {
 	if s.dbErr == nil {
@@ -209,11 +198,6 @@ func (s *StateDB) AddLog(log *types.Log) {
 	log.Index = s.logSize
 	s.logs[s.thash] = append(s.logs[s.thash], log)
 	s.logSize++
-}
-
-func (s *StateDB) SetIsFirenze(isFirenze bool, height *big.Int) {
-	s.isFirenze = isFirenze
-	s.height = height
 }
 
 func (s *StateDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types.Log {
@@ -416,33 +400,6 @@ func (s *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 	}
 }
 
-func (s *StateDB) SetFirenze(addr common.Address, height *big.Int) {
-	rawdb.SetFirenze(s.db.TrieDB().DiskDB(), addr, height)
-
-	addrlist := rawdb.GetFirenzeAddress(s.db.TrieDB().DiskDB(), height)
-	if addrlist == nil {
-		addrlist = []common.Address{}
-	}
-	addrlist = append(addrlist, addr)
-	rawdb.SetFirenzeAddress(s.db.TrieDB().DiskDB(), height, addrlist)
-}
-
-func (s *StateDB) GetFirenze(addr common.Address) *big.Int {
-	return rawdb.GetFirenze(s.db.TrieDB().DiskDB(), addr)
-}
-
-func (s *StateDB) DelFirenze(addr common.Address) {
-	rawdb.DeleteFirenze(s.db.TrieDB().DiskDB(), addr)
-}
-
-func (s *StateDB) GetFirenzeAddress(height *big.Int) []common.Address {
-	return rawdb.GetFirenzeAddress(s.db.TrieDB().DiskDB(), height)
-}
-
-func (s *StateDB) DelFirenzeAddress(height *big.Int) {
-	rawdb.DeleteFirenzeAddress(s.db.TrieDB().DiskDB(), height)
-}
-
 func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
@@ -547,7 +504,6 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 // flag set. This is needed by the state journal to revert to the correct s-
 // destructed object instead of wiping all knowledge about the state object.
 func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
-
 	// Prefer live objects if any is available
 	if obj := s.stateObjects[addr]; obj != nil {
 		return obj
@@ -595,7 +551,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		}
 	}
 	// Insert into the live set
-	obj := newObject(s, addr, *data, s.isFirenze)
+	obj := newObject(s, addr, *data)
 	s.setStateObject(obj)
 	return obj
 }
@@ -610,14 +566,6 @@ func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 	if stateObject == nil {
 		stateObject, _ = s.createObject(addr)
 	}
-
-	if s.height != nil && s.height.Cmp(big.NewInt(18_676_000)) > 0 {
-	} else {
-		if s.isFirenze && (s.GetFirenze(addr) == nil || s.GetFirenze(addr).Cmp(s.height) > 0) {
-			stateObject.setBalance(common.Big0)
-		}
-	}
-
 	return stateObject
 }
 
@@ -633,13 +581,12 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 			s.snapDestructs[prev.addrHash] = struct{}{}
 		}
 	}
-	newobj = newObject(s, addr, types.StateAccount{}, s.isFirenze)
+	newobj = newObject(s, addr, types.StateAccount{})
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
 	} else {
 		s.journal.append(resetObjectChange{prev: prev, prevdestruct: prevdestruct})
 	}
-
 	s.setStateObject(newobj)
 	if prev != nil && !prev.deleted {
 		return newobj, prev
@@ -661,11 +608,6 @@ func (s *StateDB) CreateAccount(addr common.Address) {
 	newObj, prev := s.createObject(addr)
 	if prev != nil {
 		newObj.setBalance(prev.data.Balance)
-	}
-
-	if s.isFirenze && (s.GetFirenze(addr) == nil || s.GetFirenze(addr).Cmp(s.height) > 0) {
-		s.SetFirenze(addr, s.height)
-		newObj.SetReset(true)
 	}
 }
 
@@ -714,7 +656,6 @@ func (s *StateDB) Copy() *StateDB {
 		logSize:             s.logSize,
 		preimages:           make(map[common.Hash][]byte, len(s.preimages)),
 		journal:             newJournal(),
-		isFirenze:           s.isFirenze,
 		hasher:              crypto.NewKeccakState(),
 	}
 	// Copy the dirty states, logs, and preimages
@@ -980,11 +921,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			if err != nil {
 				return common.Hash{}, err
 			}
-
-			if obj.reset {
-				s.SetFirenze(obj.address, s.height)
-			}
-
 			// Merge the dirty nodes of storage trie into global set
 			if set != nil {
 				if err := nodes.Merge(set); err != nil {

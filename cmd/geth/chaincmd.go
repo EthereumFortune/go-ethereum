@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"runtime"
 	"strconv"
@@ -435,7 +434,7 @@ func dump(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	state, err := state.New(root, false, big.NewInt(0), state.NewDatabase(db), nil)
+	state, err := state.New(root, state.NewDatabase(db), nil)
 	if err != nil {
 		return err
 	}

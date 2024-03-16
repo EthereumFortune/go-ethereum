@@ -633,7 +633,6 @@ func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, 
 	if state == nil || err != nil {
 		return nil, err
 	}
-	state.SetHeight(s.b.CurrentHeader().Number)
 	return (*hexutil.Big)(state.GetBalance(address)), state.Error()
 }
 
@@ -929,9 +928,6 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	if state == nil || err != nil {
 		return nil, err
 	}
-
-	state.SetHeight(header.Number)
-
 	if err := overrides.Apply(state); err != nil {
 		return nil, err
 	}
@@ -1067,7 +1063,6 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 	// Recap the highest gas limit with account's available balance.
 	if feeCap.BitLen() != 0 {
 		state, _, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
-		state.SetHeight(b.CurrentHeader().Number)
 		if err != nil {
 			return 0, err
 		}

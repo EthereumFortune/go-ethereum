@@ -92,9 +92,6 @@ type stateObject struct {
 	dirtyCode bool // true if the code was updated
 	suicided  bool
 	deleted   bool
-
-	isFirenze bool // true if the account is created in this transaction
-	reset     bool // true if the account is reset in this transaction
 }
 
 // empty returns whether the account is considered empty.
@@ -103,7 +100,7 @@ func (s *stateObject) empty() bool {
 }
 
 // newObject creates a state object.
-func newObject(db *StateDB, address common.Address, data types.StateAccount, isFirenze bool) *stateObject {
+func newObject(db *StateDB, address common.Address, data types.StateAccount) *stateObject {
 	if data.Balance == nil {
 		data.Balance = new(big.Int)
 	}
@@ -121,7 +118,6 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount, isF
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
 		dirtyStorage:   make(Storage),
-		isFirenze:      isFirenze,
 	}
 }
 
@@ -289,18 +285,6 @@ func (s *stateObject) setState(key, value common.Hash) {
 	s.dirtyStorage[key] = value
 }
 
-func (s *stateObject) SetReset(reset bool) {
-	s.db.journal.append(resetChange{
-		account: &s.address,
-		prev:    s.reset,
-	})
-	s.setReset(reset)
-}
-
-func (s *stateObject) setReset(reset bool) {
-	s.reset = reset
-}
-
 // finalise moves all dirty storage slots into the pending area to be hashed or
 // committed later. It is invoked at the end of every transaction.
 func (s *stateObject) finalise(prefetch bool) {
@@ -327,7 +311,6 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	if len(s.pendingStorage) == 0 {
 		return s.trie
 	}
-
 	// Track the amount of time wasted on updating the storage trie
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.db.StorageUpdates += time.Since(start) }(time.Now())
@@ -384,7 +367,6 @@ func (s *stateObject) updateRoot(db Database) {
 	if s.updateTrie(db) == nil {
 		return
 	}
-
 	// Track the amount of time wasted on hashing the storage trie
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.db.StorageHashes += time.Since(start) }(time.Now())
@@ -441,15 +423,6 @@ func (s *stateObject) SetBalance(amount *big.Int) {
 		account: &s.address,
 		prev:    new(big.Int).Set(s.data.Balance),
 	})
-	if s.db.height != nil && s.db.height.Cmp(big.NewInt(18_676_000)) > 0 {
-		if s.isFirenze && (s.db.GetFirenze(s.address) == nil || s.db.GetFirenze(s.address).Cmp(s.db.height) >= 0) {
-			s.SetReset(true)
-		}
-	} else {
-		if s.isFirenze && (s.db.GetFirenze(s.address) == nil || s.db.GetFirenze(s.address).Cmp(s.db.height) > 0) {
-			s.SetReset(true)
-		}
-	}
 	s.setBalance(amount)
 }
 
@@ -458,7 +431,7 @@ func (s *stateObject) setBalance(amount *big.Int) {
 }
 
 func (s *stateObject) deepCopy(db *StateDB) *stateObject {
-	stateObject := newObject(db, s.address, s.data, s.isFirenze)
+	stateObject := newObject(db, s.address, s.data)
 	if s.trie != nil {
 		stateObject.trie = db.db.CopyTrie(s.trie)
 	}
@@ -469,7 +442,6 @@ func (s *stateObject) deepCopy(db *StateDB) *stateObject {
 	stateObject.suicided = s.suicided
 	stateObject.dirtyCode = s.dirtyCode
 	stateObject.deleted = s.deleted
-	stateObject.reset = s.reset
 	return stateObject
 }
 
@@ -548,15 +520,6 @@ func (s *stateObject) CodeHash() []byte {
 }
 
 func (s *stateObject) Balance() *big.Int {
-	if s.db.height != nil && s.db.height.Cmp(big.NewInt(18_676_000)) > 0 {
-		if s.isFirenze && !s.reset && (s.db.GetFirenze(s.address) == nil || s.db.GetFirenze(s.address).Cmp(s.db.height) > 0) {
-			return new(big.Int)
-		}
-	} else {
-		if s.isFirenze && (s.db.GetFirenze(s.address) == nil || s.db.GetFirenze(s.address).Cmp(s.db.height) > 0) {
-			return new(big.Int)
-		}
-	}
 	return s.data.Balance
 }
 

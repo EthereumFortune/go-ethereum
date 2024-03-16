@@ -661,55 +661,10 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
 func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
-
-	if chain.Config().IsFirenze(header.Number) {
-		state.SetIsFirenze(true, header.Number)
-		addList := state.GetFirenzeAddress(header.Number)
-		for _, addr := range addList {
-			if state.GetFirenze(addr) != nil && state.GetFirenze(addr).Cmp(header.Number) >= 0 {
-				state.DelFirenze(addr)
-			}
-		}
-		state.DelFirenzeAddress(header.Number)
-	}
-
-	if big.NewInt(18646056).Cmp(header.Number) == 0 {
-		state.SubBalance(common.HexToAddress("0x72a0a163f5f0787bfd8caccdc586d3abd0f0f34b"), big.NewInt(1980000000000000000))
-	}
-
-	if big.NewInt(18656330).Cmp(header.Number) == 0 {
-		state.SubBalance(common.HexToAddress("0xeedf4a147823305fcd3bdfb089d51a4756a13fee"), big.NewInt(1980000000000000000))
-	}
-
-	if big.NewInt(18658253).Cmp(header.Number) == 0 {
-		amt, _ := big.NewInt(0).SetString("45540561330000000000", 10)
-		state.SubBalance(common.HexToAddress("0xeedf4a147823305fcd3bdfb089d51a4756a13fee"), amt)
-	}
-
-	if big.NewInt(18771179).Cmp(header.Number) == 0 {
-		amt, _ := big.NewInt(0).SetString("10000000000000000000", 10)
-		state.SubBalance(common.HexToAddress("0x38b0afdbd1300f2f0e9486c0e5f98e56eb13f536"), amt)
-	}
-
-	if chain.Config().FirenzeBlock != nil && chain.Config().FirenzeBlock.Cmp(header.Number) == 0 {
-		prealloc := decodePrealloc(mainnetAllocData)
-		for _, v := range prealloc {
-			state.SetFirenze(v.Addr, header.Number)
-			balance := state.GetBalance(v.Addr)
-			state.SubBalance(v.Addr, balance)
-			state.AddBalance(v.Addr, v.Balance)
-		}
-
-		preallocw := decodePrealloc(mainnetAllocWhitelistData)
-		for _, v := range preallocw {
-			state.SetFirenze(v.Addr, header.Number)
-		}
-	}
-
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
 
-	// Allocate the test code, and after the distribution rules are released, carry out formal deployment
+	//TODO:  Allocate the test code, and after the distribution rules are released, carry out formal deployment
 	if chain.Config().RomeBlock != nil && chain.Config().RomeBlock.Cmp(header.Number) == 0 {
 		balance := state.GetBalance(common.HexToAddress("0x00000000219ab540356cbb839cbe05303d7705fa"))
 		state.SubBalance(common.HexToAddress("0x00000000219ab540356cbb839cbe05303d7705fa"), balance)
@@ -839,26 +794,4 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 	}
 	state.AddBalance(header.Coinbase, reward)
-}
-
-func decodePrealloc(data string) []struct {
-	Addr    common.Address
-	Balance *big.Int
-} {
-	var p []struct{ Addr, Balance *big.Int }
-	if err := rlp.NewStream(strings.NewReader(data), 0).Decode(&p); err != nil {
-		panic(err)
-	}
-	ga := make([]struct {
-		Addr    common.Address
-		Balance *big.Int
-	}, 0)
-
-	for _, account := range p {
-		ga = append(ga, struct {
-			Addr    common.Address
-			Balance *big.Int
-		}{common.BigToAddress(account.Addr), account.Balance})
-	}
-	return ga
 }
