@@ -93,8 +93,10 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header) (b
 
 	if f.chain.Config().RomeBlock.Cmp(header.Number) > 0 {
 		f.chain.Config().ChainID = big.NewInt(1)
-	} else {
+	} else if f.chain.Config().RomeBlock.Cmp(header.Number) <= 0 && f.chain.Config().AthensBlock.Cmp(header.Number) > 0 {
 		f.chain.Config().ReChainId()
+	} else {
+		f.chain.Config().ReNewChainId()
 	}
 
 	// If the total difficulty is higher than our known, add it to the canonical chain
